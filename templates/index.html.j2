@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
+    header { display:flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+    .updated { font-size: 0.9rem; opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{ title }}</h1>
+    <div class="updated">Last updated: {{ last_updated }}</div>
+  </header>
+
+  <!-- Plotly chart goes here -->
+  <div id="chart">
+    {{ chart_html | safe }}
+  </div>
+</body>
+</html>
