@@ -1,24 +1,417 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ title }}</title>
+  <title>Poker Statistik</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; }
-    header { display:flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+    :root { --gap: 1rem; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; background: #f6f7fb; }
+    header { display:flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+    h1 { margin: 0; font-size: 1.6rem; }
     .updated { font-size: 0.9rem; opacity: 0.7; }
+    .card { background: #fff; border-radius: 12px; padding: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+    .card h2 { margin: 0 0 .75rem; font-size: 1.2rem; }
+    .controls { margin-top: .75rem; display: grid; gap: .5rem; }
+    select { width: 100%; }
+    small.hint { opacity: .75; }
+    .grid-2 { display: grid; grid-template-columns: 1fr; gap: var(--gap); }
+    @media (min-width: 900px) { .grid-2 { grid-template-columns: 1fr 1fr; } }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    thead th { text-align: left; border-bottom: 1px solid #e5e7eb; padding: 0.6rem; cursor: pointer; user-select: none; }
+    tbody td { border-top: 1px solid #f0f2f5; padding: 0.6rem; }
+    tbody tr:hover { background: #fafbff; }
+    .badge { display:inline-block; background:#eef2ff; padding:.25rem .5rem; border-radius:999px; font-size:.85rem; }
+    .toolbar { display:flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; justify-content: space-between; margin:.5rem 0 1rem; }
+    .toolbar .left, .toolbar .right { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
+    input[type="range"] { width: 260px; }
+    button { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: .4rem .7rem; cursor: pointer; }
+    button:hover { background: #f3f4f6; }
+    kbd { background:#eee; border-radius:4px; padding:0 .3rem; border:1px solid #ddd; }
+    .hint { font-size:.9rem; }
+    .th-active { color:#111827; }
+
+    /* Player Stats */
+    .stats-header { display:flex; align-items: baseline; justify-content: space-between; gap: .75rem; flex-wrap: wrap; margin-top:.5rem; }
+    .player-name { margin: .25rem 0 0; font-size: 1.3rem; }
+    .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--gap); margin-top: .75rem; }
+    .stat { background:#fafafa; border:1px solid #eee; border-radius: 10px; padding: .75rem; }
+    .stat .label { font-size: .85rem; opacity: .75; margin-bottom: .2rem; }
+    .stat .value { font-size: 1.2rem; font-weight: 600; }
+    .stat .sub { font-size: .85rem; opacity: .7; margin-top:.15rem; }
   </style>
 </head>
 <body>
   <header>
-    <h1>{{ title }}</h1>
-    <div class="updated">Last updated: {{ last_updated }}</div>
+    <h1>Poker Statistik</h1>
+    <div class="updated">Zuletzt aktualisiert: {{ last_updated }}</div>
   </header>
 
-  <!-- Plotly chart goes here -->
-  <div id="chart">
-    {{ chart_html | safe }}
-  </div>
+  <!-- Historischer Verlauf -->
+  <section class="card">
+    <h2>Historischer Verlauf</h2>
+    {{ chart_hist | safe }}
+
+    <div class="controls">
+      <label for="playerSelect"><strong>Spieler auswählen</strong> (Mehrfachauswahl möglich)</label>
+      <select id="playerSelect" multiple size="{{ select_size }}">
+        {% for p in players %}
+          <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+      <small class="hint">Tipp: Halte <kbd>Strg</kbd>/<kbd>Cmd</kbd> gedrückt, um mehrere Spieler zu markieren.</small>
+    </div>
+  </section>
+
+  <!-- Bestenliste -->
+  <section class="card" style="margin-top: var(--gap);">
+    <h2>Bestenliste</h2>
+
+    <div class="toolbar">
+      <div class="left">
+        <span class="badge">Datum</span>
+        <input type="range" id="dateSlider" min="0" max="{{ last_index }}" value="{{ last_index }}" step="1" />
+        <strong id="dateLabel"></strong>
+      </div>
+      <div class="right">
+        <span class="badge">Sortierung</span>
+        <label><input type="radio" name="order" value="desc" checked> Höchste zuerst</label>
+        <label><input type="radio" name="order" value="asc"> Niedrigste zuerst</label>
+        <button id="toggleRows">Alle anzeigen</button>
+      </div>
+    </div>
+
+    <div style="overflow:auto;">
+      <table id="leaderboard">
+        <thead>
+          <tr>
+            <th data-col="rank" class="th-active">#</th>
+            <th data-col="player">Spieler</th>
+            <th data-col="total">Total</th>
+            <th data-col="last">Last</th>
+            <th data-col="highest">Highest</th>
+            <th data-col="lowest">Lowest</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="hint" id="rowInfo" style="margin-top:.5rem;"></div>
+  </section>
+
+  <!-- Spieler-Stats -->
+  <section class="card" style="margin-top: var(--gap);">
+    <h2>Spieler-Stats</h2>
+    <div class="controls">
+      <label for="playerStatsSelect"><strong>Spieler wählen</strong></label>
+      <select id="playerStatsSelect">
+        {% for p in players %}
+          <option value="{{ p }}">{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="stats-header">
+      <h3 class="player-name" id="playerStatsName"></h3>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat">
+        <div class="label">Total</div>
+        <div class="value" id="stTotal">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Appearances</div>
+        <div class="value" id="stAppearances">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Average Win/Loss</div>
+        <div class="value" id="stAverage">–</div>
+        <div class="sub" id="stAverageNotes"></div>
+      </div>
+      <div class="stat">
+        <div class="label">Median</div>
+        <div class="value" id="stMedian">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Max Win</div>
+        <div class="value" id="stMaxWin">–</div>
+        <div class="sub" id="stMaxWinDate"></div>
+      </div>
+      <div class="stat">
+        <div class="label">Max Loss</div>
+        <div class="value" id="stMaxLoss">–</div>
+        <div class="sub" id="stMaxLossDate"></div>
+      </div>
+      <div class="stat">
+        <div class="label">Win-Rate</div>
+        <div class="value" id="stWinRate">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Längste Siegesserie</div>
+        <div class="value" id="stStreakWin">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Längste Verlustserie</div>
+        <div class="value" id="stStreakLoss">–</div>
+      </div>
+      <div class="stat">
+        <div class="label">Letztes Spiel</div>
+        <div class="value" id="stLastGame">–</div>
+        <div class="sub" id="stLastGameDate"></div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // ====== Data injected from Python ======
+    const PLAYERS = {{ players_json | safe }};
+    const DATES_ISO = {{ dates_iso_json | safe }};
+    const DATES_LABELS = {{ dates_labels_json | safe }};
+    const DELTAS = {{ deltas_json | safe }};   // {player: [number|null,...]}
+    const CUMS = {{ cum_json | safe }};        // {player: [number,...]}
+
+    // ===== Historischer Verlauf: player multi-select toggles traces =====
+    document.addEventListener('DOMContentLoaded', function () {
+      const gd = document.getElementById('historical_chart');
+      const select = document.getElementById('playerSelect');
+      if (select) {
+        for (const opt of select.options) opt.selected = true;
+        function updateVisibility() {
+          const selected = new Set(Array.from(select.selectedOptions).map(o => o.value));
+          const vis = PLAYERS.map(p => selected.has(p));
+          if (gd && gd.data && gd.data.length === vis.length) {
+            Plotly.restyle(gd, { visible: vis });
+          }
+        }
+        updateVisibility();
+        select.addEventListener('change', updateVisibility);
+      }
+
+      // ===== Leaderboard =====
+      const slider = document.getElementById('dateSlider');
+      const dateLabel = document.getElementById('dateLabel');
+      const tbody = document.querySelector('#leaderboard tbody');
+      const rowInfo = document.getElementById('rowInfo');
+      const toggleBtn = document.getElementById('toggleRows');
+      const orderRadios = document.querySelectorAll('input[name="order"]');
+      const headers = Array.from(document.querySelectorAll('#leaderboard thead th'));
+
+      let showAll = false;
+      let sortCol = 'total';        // default
+      let sortAsc = false;          // default: highest first
+
+      function fmt(n) {
+        if (n === null || n === undefined || Number.isNaN(n)) return '0';
+        return (Math.round(n * 100) / 100).toString();
+      }
+      function fmtPct(n) {
+        if (n === null || n === undefined || Number.isNaN(n)) return '–';
+        return (Math.round(n * 10) / 10).toString() + '%';
+      }
+      function setDateLabel(i) { dateLabel.textContent = DATES_LABELS[i] || ''; }
+      function computeRows(idx) {
+        const rows = [];
+        for (const p of PLAYERS) {
+          const deltas = DELTAS[p] || [];
+          const cums = CUMS[p] || [];
+          const last = (deltas[idx] == null) ? 0 : deltas[idx];
+          const slice = deltas.slice(0, idx + 1).filter(v => v != null);
+          const highest = slice.length ? Math.max(...slice) : 0;
+          const lowest  = slice.length ? Math.min(...slice) : 0;
+          const total = (cums[idx] == null) ? 0 : cums[idx];
+          rows.push({ player: p, total, last, highest, lowest });
+        }
+        return rows;
+      }
+      function sortRows(rows) {
+        const key = sortCol;
+        rows.sort((a, b) => {
+          if (key === 'player') {
+            return sortAsc ? a.player.localeCompare(b.player) : b.player.localeCompare(a.player);
+          } else {
+            const av = a[key] ?? (sortAsc ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+            const bv = b[key] ?? (sortAsc ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+            return sortAsc ? (av - bv) : (bv - av);
+          }
+        });
+        return rows;
+      }
+      function renderLB(idx) {
+        setDateLabel(idx);
+        let rows = sortRows(computeRows(idx));
+        const displayRows = showAll ? rows : rows.slice(0, 10);
+        tbody.innerHTML = '';
+        displayRows.forEach((r, i) => {
+          const tr = document.createElement('tr');
+          const rank = i + 1;
+          tr.innerHTML = `
+            <td>${rank}</td>
+            <td>${r.player}</td>
+            <td>${fmt(r.total)}</td>
+            <td>${fmt(r.last)}</td>
+            <td>${fmt(r.highest)}</td>
+            <td>${fmt(r.lowest)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        rowInfo.textContent = showAll
+          ? `Zeige alle ${rows.length} Spieler.`
+          : `Zeige Top 10 von ${rows.length} Spielern.`;
+      }
+
+      // Init Leaderboard
+      setDateLabel(slider.value);
+      renderLB(+slider.value);
+
+      slider.addEventListener('input', e => renderLB(+e.target.value));
+      toggleBtn.addEventListener('click', () => {
+        showAll = !showAll;
+        toggleBtn.textContent = showAll ? 'Nur Top 10' : 'Alle anzeigen';
+        renderLB(+slider.value);
+      });
+      orderRadios.forEach(r => r.addEventListener('change', e => {
+        sortAsc = (e.target.value === 'asc');
+        renderLB(+slider.value);
+      }));
+      headers.forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.getAttribute('data-col');
+          if (!col) return;
+          if (col === sortCol) {
+            sortAsc = !sortAsc;
+          } else {
+            sortCol = col;
+            sortAsc = (col === 'player') ? true : false;
+            headers.forEach(h => h.classList.remove('th-active'));
+            th.classList.add('th-active');
+          }
+          renderLB(+slider.value);
+        });
+      });
+
+      // ===== Player Stats =====
+      const psSelect = document.getElementById('playerStatsSelect');
+      const psName   = document.getElementById('playerStatsName');
+      const stTotal  = document.getElementById('stTotal');
+      const stApps   = document.getElementById('stAppearances');
+      const stAvg    = document.getElementById('stAverage');
+      const stAvgN   = document.getElementById('stAverageNotes');
+      const stMed    = document.getElementById('stMedian');
+      const stMaxW   = document.getElementById('stMaxWin');
+      const stMaxWdt = document.getElementById('stMaxWinDate');
+      const stMaxL   = document.getElementById('stMaxLoss');
+      const stMaxLdt = document.getElementById('stMaxLossDate');
+      const stWR     = document.getElementById('stWinRate');
+      const stStW    = document.getElementById('stStreakWin');
+      const stStL    = document.getElementById('stStreakLoss');
+      const stLast   = document.getElementById('stLastGame');
+      const stLastDt = document.getElementById('stLastGameDate');
+
+      function nonNull(vals){ return vals.filter(v => v != null); }
+      function sum(vals){ return vals.reduce((a,b)=>a+b,0); }
+      function median(vals){
+        if (!vals.length) return null;
+        const s = vals.slice().sort((a,b)=>a-b);
+        const m = Math.floor(s.length/2);
+        return (s.length % 2) ? s[m] : (s[m-1] + s[m]) / 2;
+      }
+      function maxWithIndex(vals, predicate = (v)=>true){
+        let best = null, idx = -1;
+        for (let i=0;i<vals.length;i++){
+          const v = vals[i];
+          if (v == null || !predicate(v)) continue;
+          if (best === null || v > best){ best = v; idx = i; }
+        }
+        return [best, idx];
+      }
+      function minWithIndex(vals, predicate = (v)=>true){
+        let best = null, idx = -1;
+        for (let i=0;i<vals.length;i++){
+          const v = vals[i];
+          if (v == null || !predicate(v)) continue;
+          if (best === null || v < best){ best = v; idx = i; }
+        }
+        return [best, idx];
+      }
+      function longestStreak(vals, cond){
+        let best=0, cur=0;
+        for (const v of vals){
+          if (v == null){ cur = 0; continue; }
+          if (cond(v)){ cur++; best = Math.max(best, cur); }
+          else { cur = 0; }
+        }
+        return best;
+      }
+      function lastNonNull(vals){
+        for (let i=vals.length-1;i>=0;i--){
+          if (vals[i] != null) return [vals[i], i];
+        }
+        return [null, -1];
+      }
+
+      function renderPlayer(p){
+        psName.textContent = p;
+
+        const deltas = DELTAS[p] || [];
+        const cums   = CUMS[p] || [];
+        const valid  = nonNull(deltas);
+        const apps   = valid.length;
+
+        // Total = last cumulative (or 0)
+        const total = cums.length ? cums[cums.length - 1] : 0;
+
+        // Average & median over actual appearances (non-null only)
+        const avg = apps ? sum(valid)/apps : null;
+        const med = median(valid);
+
+        // Max Win (>0) and Max Loss (<0)
+        let [maxWin, idxW] = maxWithIndex(deltas, v => v > 0);
+        if (maxWin == null) maxWin = 0, idxW = -1;
+
+        let [maxLoss, idxL] = minWithIndex(deltas, v => v < 0);
+        if (maxLoss == null) maxLoss = 0, idxL = -1;
+
+        // Win-rate, streaks
+        const wins = valid.filter(v => v > 0).length;
+        const winRate = apps ? (wins/apps*100) : null;
+        const streakWin = longestStreak(deltas, v => v > 0);
+        const streakLoss = longestStreak(deltas, v => v < 0);
+
+        // Last game
+        const [lastDelta, idxLast] = lastNonNull(deltas);
+
+        // Fill UI
+        stTotal.textContent = fmt(total);
+        stApps.textContent  = apps.toString();
+        stAverage.textContent = (avg==null) ? '–' : fmt(avg);
+        stAverageNotes.textContent = apps ? `(über ${apps} Spiele mit Wert)` : '';
+        stMedian.textContent = (med==null) ? '–' : fmt(med);
+
+        stMaxW.textContent   = fmt(maxWin);
+        stMaxWdt.textContent = (idxW>=0) ? `am ${DATES_LABELS[idxW]}` : '';
+        stMaxL.textContent   = fmt(maxLoss);
+        stMaxLdt.textContent = (idxL>=0) ? `am ${DATES_LABELS[idxL]}` : '';
+
+        stWinRate.textContent = fmtPct(winRate);
+        stStreakWin.textContent = streakWin.toString();
+        stStreakLoss.textContent = streakLoss.toString();
+
+        stLast.textContent   = (lastDelta==null) ? '–' : fmt(lastDelta);
+        stLastDt.textContent = (idxLast>=0) ? `am ${DATES_LABELS[idxLast]}` : '';
+      }
+
+      // Init Player Stats
+      if (psSelect){
+        // default to first player
+        if (psSelect.options.length) psSelect.selectedIndex = 0;
+        renderPlayer(psSelect.value);
+        psSelect.addEventListener('change', () => renderPlayer(psSelect.value));
+      }
+    });
+  </script>
 </body>
 </html>
