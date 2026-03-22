@@ -42,6 +42,28 @@
     .stat .label { font-size: .85rem; opacity: .75; margin-bottom: .2rem; }
     .stat .value { font-size: 1.2rem; font-weight: 600; }
     .stat .sub { font-size: .85rem; opacity: .7; margin-top:.15rem; }
+
+    /* ── Mobile: chart ── */
+    .chart-wrap { min-height: 400px; }
+    .chart-wrap .plotly-graph-div { min-height: 400px !important; }
+
+    @media (max-width: 600px) {
+      body { margin: .75rem; }
+      .chart-wrap { min-height: 350px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .chart-wrap .plotly-graph-div { min-height: 350px !important; min-width: 550px; }
+    }
+
+    /* ── Chip-based player picker ── */
+    .chip-grid { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+    .chip {
+      display: inline-block; padding: .3rem .65rem; border-radius: 999px;
+      border: 1px solid #d1d5db; background: #fff; font-size: .85rem;
+      cursor: pointer; user-select: none; transition: all .15s;
+    }
+    .chip.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+    .chip:hover { border-color: #9ca3af; }
+    .chip-actions { display: flex; gap: .5rem; margin-top: .5rem; }
+    .chip-actions button { font-size: .8rem; padding: .25rem .6rem; }
   </style>
 </head>
 <body>
@@ -53,16 +75,21 @@
   <!-- Historischer Verlauf -->
   <section class="card">
     <h2>Historischer Verlauf</h2>
-    {{ chart_hist | safe }}
+    <div class="chart-wrap">
+      {{ chart_hist | safe }}
+    </div>
 
     <div class="controls">
-      <label for="playerSelect"><strong>Spieler auswählen</strong> (Mehrfachauswahl möglich)</label>
-      <select id="playerSelect" multiple size="{{ select_size }}">
+      <label><strong>Spieler auswählen</strong></label>
+      <div class="chip-actions">
+        <button id="chipAll" type="button">Alle</button>
+        <button id="chipNone" type="button">Keine</button>
+      </div>
+      <div class="chip-grid" id="playerChips">
         {% for p in players %}
-          <option value="{{ p }}">{{ p }}</option>
+          <span class="chip active" data-player="{{ p }}">{{ p }}</span>
         {% endfor %}
-      </select>
-      <small class="hint">Tipp: Halte <kbd>Strg</kbd>/<kbd>Cmd</kbd> gedrückt, um mehrere Spieler zu markieren.</small>
+      </div>
     </div>
   </section>
 
@@ -174,21 +201,46 @@
     const DELTAS = {{ deltas_json | safe }};   // {player: [number|null,...]}
     const CUMS = {{ cum_json | safe }};        // {player: [number,...]}
 
-    // ===== Historischer Verlauf: player multi-select toggles traces =====
+    // ===== Historischer Verlauf: chip-based player toggle =====
     document.addEventListener('DOMContentLoaded', function () {
       const gd = document.getElementById('historical_chart');
-      const select = document.getElementById('playerSelect');
-      if (select) {
-        for (const opt of select.options) opt.selected = true;
-        function updateVisibility() {
-          const selected = new Set(Array.from(select.selectedOptions).map(o => o.value));
-          const vis = PLAYERS.map(p => selected.has(p));
-          if (gd && gd.data && gd.data.length === vis.length) {
-            Plotly.restyle(gd, { visible: vis });
-          }
+      const chipContainer = document.getElementById('playerChips');
+      const btnAll  = document.getElementById('chipAll');
+      const btnNone = document.getElementById('chipNone');
+
+      function getSelectedPlayers() {
+        return new Set(
+          Array.from(chipContainer.querySelectorAll('.chip.active')).map(c => c.dataset.player)
+        );
+      }
+
+      function updateVisibility() {
+        const selected = getSelectedPlayers();
+        const vis = PLAYERS.map(p => selected.has(p));
+        if (gd && gd.data && gd.data.length === vis.length) {
+          Plotly.restyle(gd, { visible: vis });
         }
+      }
+
+      // Chip click
+      chipContainer.addEventListener('click', function (e) {
+        const chip = e.target.closest('.chip');
+        if (!chip) return;
+        chip.classList.toggle('active');
         updateVisibility();
-        select.addEventListener('change', updateVisibility);
+      });
+
+      // Alle / Keine buttons
+      btnAll.addEventListener('click', function () {
+        chipContainer.querySelectorAll('.chip').forEach(c => c.classList.add('active'));
+        updateVisibility();
+      });
+      btnNone.addEventListener('click', function () {
+        chipContainer.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        updateVisibility();
+      });
+
+      updateVisibility();
       }
 
       // ===== Leaderboard =====
