@@ -43,15 +43,11 @@
     .stat .value { font-size: 1.2rem; font-weight: 600; }
     .stat .sub { font-size: .85rem; opacity: .7; margin-top:.15rem; }
 
-    /* ── Mobile: chart ── */
-    .chart-wrap { min-height: 400px; }
-    .chart-wrap .plotly-graph-div { min-height: 400px !important; }
-
+    /* ── Mobile: chart + body ── */
     @media (max-width: 600px) {
       body { margin: .75rem; }
-      .chart-wrap { min-height: 350px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-      .chart-wrap .plotly-graph-div { min-height: 350px !important; min-width: 550px; }
     }
+    .chart-wrap { width: 100%; overflow: hidden; }
 
     /* ── Chip-based player picker ── */
     .chip-grid { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
@@ -64,6 +60,26 @@
     .chip:hover { border-color: #9ca3af; }
     .chip-actions { display: flex; gap: .5rem; margin-top: .5rem; }
     .chip-actions button { font-size: .8rem; padding: .25rem .6rem; }
+
+    /* ── Date range picker ── */
+    .date-range { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .5rem; }
+    .date-range label { font-size: .85rem; }
+    .date-range input[type="date"] {
+      border: 1px solid #d1d5db; border-radius: 8px; padding: .35rem .5rem;
+      font-size: .85rem; font-family: inherit;
+    }
+
+    /* ── Twint payments ── */
+    .payments-list { display: grid; gap: .4rem; margin-top: .5rem; }
+    .payment-row {
+      display: flex; align-items: center; gap: .5rem;
+      background: #fafafa; border: 1px solid #eee; border-radius: 10px;
+      padding: .5rem .75rem; font-size: .95rem;
+    }
+    .payment-arrow { opacity: .5; }
+    .payment-amount { margin-left: auto; font-weight: 600; white-space: nowrap; }
+    .payment-from { color: #dc2626; font-weight: 600; }
+    .payment-to { color: #16a34a; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -72,9 +88,29 @@
     <div class="updated">Zuletzt aktualisiert: {{ last_updated }}</div>
   </header>
 
+  <!-- Twint Zahlungen -->
+  <section class="card" style="margin-bottom: var(--gap);">
+    <h2>Twint Zahlungen: <span style="font-weight:400; font-size:.9rem; opacity:.7;">{{ last_game_date }}</span></h2>
+    {% if payments %}
+      <div class="payments-list">
+        {% for t in payments %}
+          <div class="payment-row">
+            <span class="payment-from">{{ t.from }}</span>
+            <span class="payment-arrow">→</span>
+            <span class="payment-to">{{ t.to }}</span>
+            <span class="payment-amount">CHF {{ "%.2f"|format(t.amount) }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="opacity:.6; margin:.5rem 0 0;">Keine Zahlungen für das letzte Spiel.</p>
+    {% endif %}
+  </section>
+
   <!-- Historischer Verlauf -->
   <section class="card">
     <h2>Historischer Verlauf</h2>
+
     <div class="chart-wrap">
       {{ chart_hist | safe }}
     </div>
@@ -85,9 +121,16 @@
         <button id="chipAll" type="button">Alle</button>
         <button id="chipNone" type="button">Keine</button>
       </div>
+      <div class="date-range">
+        <label for="dateFrom">Von:</label>
+        <input type="date" id="dateFrom" value="{{ first_date }}" min="{{ first_date }}" max="{{ last_date }}">
+        <label for="dateTo">Bis:</label>
+        <input type="date" id="dateTo" value="{{ last_date }}" min="{{ first_date }}" max="{{ last_date }}">
+        <button id="dateReset" type="button">Zurücksetzen</button>
+      </div>
       <div class="chip-grid" id="playerChips">
         {% for p in players %}
-          <span class="chip active" data-player="{{ p }}">{{ p }}</span>
+          <span class="chip{{ ' active' if loop.index0 < default_visible }}" data-player="{{ p }}">{{ p }}</span>
         {% endfor %}
       </div>
     </div>
@@ -222,25 +265,85 @@
         }
       }
 
+      // ===== Chart: date range picker & Y auto-fit =====
+      const dateFrom  = document.getElementById('dateFrom');
+      const dateTo    = document.getElementById('dateTo');
+      const dateReset = document.getElementById('dateReset');
+
+      function applyDateRange() {
+        if (!gd || !gd.data) return;
+
+        const from = dateFrom.value;
+        const to   = dateTo.value;
+
+        // Compute Y range for visible traces within [from, to]
+        let yLo = Infinity, yHi = -Infinity;
+        for (const trace of gd.data) {
+          if (trace.visible === false) continue;
+          for (let i = 0; i < trace.x.length; i++) {
+            const xStr = trace.x[i];
+            if (xStr < from || xStr > to) continue;
+            const y = trace.y[i];
+            if (y != null && isFinite(y)) {
+              if (y < yLo) yLo = y;
+              if (y > yHi) yHi = y;
+            }
+          }
+        }
+
+        const update = {
+          'xaxis.range': [from, to],
+          'xaxis.autorange': false
+        };
+
+        if (isFinite(yLo)) {
+          const pad = Math.max((yHi - yLo) * 0.08, 5);
+          update['yaxis.range'] = [yLo - pad, yHi + pad];
+          update['yaxis.autorange'] = false;
+        } else {
+          update['yaxis.autorange'] = true;
+        }
+
+        Plotly.relayout(gd, update);
+      }
+
+      function updateVisibilityAndFit() {
+        updateVisibility();
+        applyDateRange();
+      }
+
+      dateFrom.addEventListener('change', applyDateRange);
+      dateTo.addEventListener('change', applyDateRange);
+
+      dateReset.addEventListener('click', function () {
+        dateFrom.value = '{{ first_date }}';
+        dateTo.value   = '{{ last_date }}';
+        Plotly.relayout(gd, {
+          'xaxis.autorange': true,
+          'yaxis.autorange': true
+        });
+      });
+
       // Chip click
       chipContainer.addEventListener('click', function (e) {
         const chip = e.target.closest('.chip');
         if (!chip) return;
         chip.classList.toggle('active');
-        updateVisibility();
+        updateVisibilityAndFit();
       });
 
       // Alle / Keine buttons
       btnAll.addEventListener('click', function () {
         chipContainer.querySelectorAll('.chip').forEach(c => c.classList.add('active'));
-        updateVisibility();
+        updateVisibilityAndFit();
       });
       btnNone.addEventListener('click', function () {
         chipContainer.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-        updateVisibility();
+        updateVisibilityAndFit();
       });
 
-      updateVisibility();
+      // Initial render
+      updateVisibilityAndFit();
 
       // ===== Leaderboard =====
       const slider = document.getElementById('dateSlider');
@@ -438,18 +541,18 @@
         // Fill UI
         stTotal.textContent = fmt(total);
         stApps.textContent  = apps.toString();
-        stAverage.textContent = (avg==null) ? '–' : fmt(avg);
-        stAverageNotes.textContent = apps ? `(über ${apps} Spiele mit Wert)` : '';
-        stMedian.textContent = (med==null) ? '–' : fmt(med);
+        stAvg.textContent = (avg==null) ? '–' : fmt(avg);
+        stAvgN.textContent = apps ? `(über ${apps} Spiele mit Wert)` : '';
+        stMed.textContent = (med==null) ? '–' : fmt(med);
 
         stMaxW.textContent   = fmt(maxWin);
         stMaxWdt.textContent = (idxW>=0) ? `am ${DATES_LABELS[idxW]}` : '';
         stMaxL.textContent   = fmt(maxLoss);
         stMaxLdt.textContent = (idxL>=0) ? `am ${DATES_LABELS[idxL]}` : '';
 
-        stWinRate.textContent = fmtPct(winRate);
-        stStreakWin.textContent = streakWin.toString();
-        stStreakLoss.textContent = streakLoss.toString();
+        stWR.textContent = fmtPct(winRate);
+        stStW.textContent = streakWin.toString();
+        stStL.textContent = streakLoss.toString();
 
         stLast.textContent   = (lastDelta==null) ? '–' : fmt(lastDelta);
         stLastDt.textContent = (idxLast>=0) ? `am ${DATES_LABELS[idxLast]}` : '';
