@@ -91,11 +91,13 @@
     const sum = round2(res.reduce((a, [, v]) => a + v, 0));
     $('#gameResults').innerHTML = res.map(([p, v], i) =>
       `<div class="list-row"><span class="muted small" style="width:1.2em">${i + 1}</span><span class="grow">${playerLink(p)}</span><span class="num ${cls(v)}" style="font-weight:600">${fmt(v, { sign: true })}</span></div>`).join('') +
-      (Math.abs(sum) >= 0.01 ? `<div class="hint">Differenz in diesem Spiel: ${fmt(sum, { sign: true })}</div>` : '');
+      (Math.abs(sum) >= 0.01 ? `<div class="hint">Summe dieses Abends: ${fmt(sum, { sign: true })} statt 0</div>` : '');
     const pays = PS.payments(g.results);
-    $('#gamePayments').innerHTML = pays.length ? pays.map(t =>
+    const { share } = PS.imbalance(g.results);
+    $('#gamePayments').innerHTML = (pays.length ? pays.map(t =>
       `<div class="list-row"><span class="from">${esc(t.from)}</span><span class="arrow">→</span><span class="to">${esc(t.to)}</span><span class="amt">CHF ${fmt(t.amount, { fixed: true })}</span></div>`).join('')
-      : '<div class="muted small">Keine Zahlungen nötig.</div>';
+      : '<div class="muted small">Keine Zahlungen nötig.</div>') +
+      (Math.abs(sum) >= 0.01 ? `<div class="hint">Die Differenz von ${fmt(-sum, { sign: true, fixed: true })} ist gleichmässig verteilt (${fmt(share, { sign: true, fixed: true })} pro Spieler). Die Statistik nutzt die Originalwerte.</div>` : '');
   }
 
   function leaderboardRows(period) {

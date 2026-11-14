@@ -201,13 +201,16 @@
     let msg = '', type = '';
     if (bad.length) { type = 'err'; msg = `Ungültige Zahl bei ${bad.map(r => esc(r.name)).join(', ')}`; }
     else if (rows.length && empty.length) { type = 'warn'; msg = `Noch kein Betrag: ${empty.map(r => esc(r.name)).join(', ')} (leer = nicht gespeichert)`; }
-    else if (rows.length >= 2 && Math.abs(sum) >= 0.01) { type = 'warn'; msg = `Die Summe sollte 0 sein. Differenz: ${fmt(sum, { sign: true })}`; }
+    else if (rows.length >= 2 && Math.abs(sum) >= 0.01) { type = 'warn'; msg = `Die Summe sollte 0 sein. Differenz: ${fmt(sum, { sign: true })}. Bitte Tippfehler prüfen.`; }
     else if (rows.length >= 2) { type = 'ok'; msg = '✓ Geht auf'; }
     notice('#sumMsg', type, msg);
     $('#overrideWrap').hidden = !(rows.length >= 2 && Math.abs(sum) >= 0.01 && !bad.length);
     const pays = PS.payments(res);
     $('#payWrap').hidden = !pays.length;
     $('#payList').innerHTML = pays.map(t => `<div class="list-row"><span class="from">${esc(t.from)}</span><span class="arrow">→</span><span class="to">${esc(t.to)}</span><span class="amt">CHF ${fmt(t.amount, { fixed: true })}</span></div>`).join('');
+    const { share } = PS.imbalance(res);
+    $('#payNote').innerHTML = rows.length >= 2 && Math.abs(sum) >= 0.01
+      ? `Differenz gleichmässig verteilt: ${fmt(share, { sign: true, fixed: true })} pro Spieler. Gespeichert werden die eingegebenen Werte.` : '';
   }
   function renderMode() {
     $('#formTitle').textContent = editDate ? `Spiel vom ${dateLabel(editDate)} bearbeiten` : 'Neues Spiel';

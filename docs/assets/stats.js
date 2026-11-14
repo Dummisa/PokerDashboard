@@ -85,20 +85,34 @@ const PS = (() => {
   }
 
   /** Minimal set of payments to settle one game. */
+  /** Difference of a game (should be 0) and the per-player share used to even it out. */
+  function imbalance(results) {
+    const vals = Object.values(results);
+    const sum = round2(vals.reduce((a, b) => a + b, 0));
+    return { sum, share: vals.length ? -sum / vals.length : 0 };
+  }
+
+  /** Minimal set of payments to settle one game. If the results don't add up to 0,
+   *  the difference is spread evenly over all players of that game (stored data stays unchanged). */
   function payments(results) {
-    const debt = [], cred = [];
-    for (const [p, v] of Object.entries(results)) {
-      if (v < 0) debt.push([-v, p]); else if (v > 0) cred.push([v, p]);
-    }
-    debt.sort((a, b) => b[0] - a[0]); cred.sort((a, b) => b[0] - a[0]);
+    const entries = Object.entries(results);
+    if (!entries.length) return [];
+    // Work in whole cents. Spread the difference evenly; leftover cents go to the first players.
+    const cents = entries.map(([, v]) => Math.round(v * 100));
+    const diff = -cents.reduce((a, b) => a + b, 0);
+    const n = entries.length;
+    const base = Math.trunc(diff / n), rest = diff - base * n;
+    const bal = entries.map(([p], i) => [p, cents[i] + base + (i < Math.abs(rest) ? Math.sign(rest) : 0)]);
+    const debt = bal.filter(([, c]) => c < 0).map(([p, c]) => [-c, p]).sort((a, b) => b[0] - a[0]);
+    const cred = bal.filter(([, c]) => c > 0).map(([p, c]) => [c, p]).sort((a, b) => b[0] - a[0]);
     const out = [];
     let i = 0, j = 0;
     while (i < debt.length && j < cred.length) {
-      const amt = round2(Math.min(debt[i][0], cred[j][0]));
-      if (amt > 0) out.push({ from: debt[i][1], to: cred[j][1], amount: amt });
+      const amt = Math.min(debt[i][0], cred[j][0]);
+      if (amt > 0) out.push({ from: debt[i][1], to: cred[j][1], amount: amt / 100 });
       debt[i][0] -= amt; cred[j][0] -= amt;
-      if (debt[i][0] < 0.005) i++;
-      if (cred[j][0] < 0.005) j++;
+      if (!debt[i][0]) i++;
+      if (!cred[j][0]) j++;
     }
     return out.sort((a, b) => a.from.localeCompare(b.from, 'de') || b.amount - a.amount);
   }
@@ -123,5 +137,5 @@ const PS = (() => {
   }
 
   return { loadGames, normalize, fmt, cls, pct, dateLabel, MONTHS, esc, round2, summarize, longestStreak,
-    model, playersByRecent, payments, colorMap, serialize };
+    model, playersByRecent, payments, imbalance, colorMap, serialize };
 })();
