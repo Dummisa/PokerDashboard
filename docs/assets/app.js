@@ -413,7 +413,7 @@
     const bestMean = leaderboardRows('all').filter(r => r.n >= 20).sort((a, b) => b.mean - a.mean)[0];
     const steady = leaderboardRows('all').filter(r => r.n >= 20).sort((a, b) => a.sd - b.sd)[0];
     const wild = leaderboardRows('all').filter(r => r.n >= 20).sort((a, b) => b.sd - a.sd)[0];
-    const rec = (icon, label, p, val, sub) => `<div class="list-row"><span>${icon}</span><span class="grow"><span class="muted small">${label}</span><br>${playerLink(p)} <span class="muted small">${sub}</span></span><span class="num" style="font-weight:700">${val}</span></div>`;
+    const rec = (icon, label, p, val, sub) => `<div class="list-row"><span>${icon}</span><span class="grow wrap"><span class="muted small">${label}</span><br>${playerLink(p)} <span class="muted small">${sub}</span></span><span class="num" style="font-weight:700">${val}</span></div>`;
     $('#groupRecords').innerHTML = [
       rec('💰', 'Höchster Gewinn an einem Abend', bestWin.p, `<span class="pos">${fmt(bestWin.v, { sign: true })}</span>`, dateLabel(bestWin.d)),
       rec('💸', 'Höchster Verlust an einem Abend', worstLoss.p, `<span class="neg">${fmt(worstLoss.v, { sign: true })}</span>`, dateLabel(worstLoss.d)),

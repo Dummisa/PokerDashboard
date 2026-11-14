@@ -177,7 +177,10 @@ a.player-cell { color: var(--text); text-decoration: none; font-weight: 600; }
 .player-cell .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 
 /* ── Lists ── */
-.list { display: grid; gap: 6px; }
+.list { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+.stack, .grid-2 { min-width: 0; }
+.stack > *, .grid-2 > * { min-width: 0; }
+.list-row .grow.wrap { white-space: normal; }
 .list-row { display: flex; align-items: center; gap: 10px; background: var(--card-2); border-radius: 10px; padding: 9px 12px; }
 .list-row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pay .from { color: var(--neg); font-weight: 600; }
