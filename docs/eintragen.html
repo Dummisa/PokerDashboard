@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f3f4f8" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0c0e14" media="(prefers-color-scheme: dark)" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>♠️</text></svg>" />
+  <title>Spiel eintragen · Poker Statistik</title>
+  <link rel="stylesheet" href="assets/style.css" />
+  <style>
+    body { padding-bottom: 32px; }
+    .entry-row { display: grid; grid-template-columns: 1fr 44px 110px 36px; gap: 6px; align-items: center; }
+    .entry-row .pname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+    .sign { font-size: 1.2rem; font-weight: 700; padding: 6px 0; justify-content: center; width: 44px; }
+    .sign.minus { color: var(--neg); border-color: var(--neg); }
+    .sign.plus { color: var(--pos); border-color: var(--pos); }
+    .entry-row input { text-align: right; font-variant-numeric: tabular-nums; }
+    .x { padding: 6px 0; justify-content: center; width: 36px; color: var(--muted); }
+    .sumbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: 12px; background: var(--card-2); font-weight: 600; }
+    .chip.picked { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+    details summary { cursor: pointer; font-weight: 600; }
+    ol.steps { padding-left: 1.2rem; margin: 8px 0; font-size: .9rem; }
+    ol.steps li { margin: 4px 0; }
+    code { background: var(--card-2); padding: 1px 5px; border-radius: 5px; font-size: .85em; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="btn small" href="./">← Statistik</a>
+      <span class="spacer"></span>
+      <strong>Spiel eintragen</strong>
+    </div>
+  </header>
+
+  <main class="stack" style="max-width:640px">
+    <!-- Verbindung -->
+    <section class="card" id="connCard">
+      <div class="card-head"><h2>GitHub-Verbindung</h2><span id="connStatus" class="small muted"></span></div>
+      <div id="connSetup">
+        <p class="small" style="margin-top:0">Neue Spiele werden direkt in <code>docs/data/games.json</code> im Repository gespeichert. Dafür braucht dieses Gerät einmalig einen GitHub-Token. Er wird nur in diesem Browser gespeichert.</p>
+        <details>
+          <summary>So erstellst du den Token (2 Min.)</summary>
+          <ol class="steps">
+            <li>Öffne <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Fine-grained token erstellen</a></li>
+            <li>Name z.B. <code>Poker eintragen</code>, Ablaufdatum nach Wunsch (max. 1 Jahr)</li>
+            <li><em>Repository access</em>: <strong>Only select repositories</strong> → <code>PokerDashboard</code></li>
+            <li><em>Permissions → Repository → Contents</em>: <strong>Read and write</strong></li>
+            <li><em>Generate token</em>, kopieren und hier einfügen. Tipp: im Passwort-Manager speichern, dann ist jedes weitere Gerät in Sekunden eingerichtet.</li>
+          </ol>
+        </details>
+        <div class="row" style="margin-top:10px">
+          <input type="password" id="tokenInput" placeholder="github_pat_…" autocomplete="off" style="flex:1" />
+          <button class="btn primary" id="tokenSave">Verbinden</button>
+        </div>
+      </div>
+      <div id="connDone" hidden class="row">
+        <span class="grow small" style="flex:1" id="connWho"></span>
+        <button class="btn small danger" id="tokenRemove">Token entfernen</button>
+      </div>
+      <div id="connMsg" style="margin-top:10px"></div>
+    </section>
+
+    <!-- Formular -->
+    <section class="card" id="formCard">
+      <div class="card-head">
+        <h2 id="formTitle">Neues Spiel</h2>
+        <button class="btn small" id="cancelEdit" hidden>Abbrechen</button>
+      </div>
+      <div class="field"><label for="date">Datum</label><input type="date" id="date" /></div>
+
+      <h3>Spieler auswählen</h3>
+      <div class="chips wrap" id="pickChips"></div>
+      <button class="btn small" id="morePlayers" style="margin-top:8px">Alle Spieler zeigen</button>
+      <div class="row" style="margin-top:8px">
+        <input type="text" id="newPlayer" placeholder="Neuer Spieler" autocomplete="off" style="flex:1" />
+        <button class="btn" id="addPlayer">Hinzufügen</button>
+      </div>
+
+      <h3>Resultate <span class="muted small" style="font-weight:400">(+ Gewinn / − Verlust in CHF)</span></h3>
+      <div class="list" id="rows"></div>
+      <div class="muted small" id="noRows">Noch keine Spieler ausgewählt.</div>
+
+      <div class="sumbar" style="margin-top:12px"><span>Summe</span><span id="sum" class="num">0</span></div>
+      <div id="sumMsg" style="margin-top:8px"></div>
+      <label class="row small" id="overrideWrap" hidden style="margin-top:6px"><input type="checkbox" id="override" /> Trotzdem speichern (Differenz bleibt bestehen)</label>
+
+      <div id="payWrap" hidden>
+        <h3>Twint-Zahlungen</h3>
+        <div class="list pay" id="payList"></div>
+      </div>
+
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary" id="save" style="flex:1; justify-content:center; padding:12px">Speichern</button>
+        <button class="btn danger" id="del" hidden>Löschen</button>
+      </div>
+      <div id="saveMsg" style="margin-top:10px"></div>
+    </section>
+
+    <!-- Letzte Spiele -->
+    <section class="card">
+      <div class="card-head"><h2>Letzte Spiele</h2><span class="muted small">zum Bearbeiten antippen</span></div>
+      <div class="list" id="recent"></div>
+    </section>
+  </main>
+
+  <script src="assets/stats.js"></script>
+  <script src="assets/entry.js"></script>
+</body>
+</html>
